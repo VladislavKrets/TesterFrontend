@@ -1,0 +1,32 @@
+.drawer-canvas{
+    position: fixed;
+    left: 0;
+    top: 0;
+    min-width: 100%;
+    width: 100%;
+    min-height: 100%;
+    height: 100%;
+    z-index: 1;
+}
+.drawer{
+    position: fixed;
+    height: 100%;
+    width: 70%;
+    background-color: #d3e8d4;
+    color: green;
+    z-index: 2;
+}
+.drawer .content{
+    margin-top: 50px;
+    overflow: scroll;
+}
+.drawer-item{
+    display: flex;
+    align-items: center;
+    padding: 15px 10px;
+    font-size: 1.5em;
+}
+.content .current{
+    border-bottom: 1px solid green;
+    background-color: #b2d4b3;
+}
