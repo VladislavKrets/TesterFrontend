@@ -1,6 +1,9 @@
 import React from "react";
 import './PanelContent.css'
 import axios from './api'
+import Cookies from 'universal-cookie'
+
+const cookies = new Cookies();
 
 export default class PanelContent extends React.Component {
     constructor(props) {
@@ -36,7 +39,7 @@ export default class PanelContent extends React.Component {
             this.setState({
                 checked: checked
             })
-        } else if (question.type === 'input'){
+        } else if (question.type === 'input') {
             this.setState({
                 currentInputAnswer: event.target.value
             })
@@ -44,6 +47,17 @@ export default class PanelContent extends React.Component {
     }
 
     nextClick = () => {
+        const savedState = {}
+        const questionsIds = this.state.questions.map(x => x.id)
+        const score = this.state.currentScore;
+        const currentIndex = this.state.currentIndex;
+
+        savedState['questions'] = questionsIds
+        savedState['currentScore'] = score;
+        savedState['currentIndex'] = currentIndex + 1;
+
+        cookies.set(this.props.currentItem.id, JSON.stringify(savedState), {maxAge: 60 * 60 * 24 * 2})
+
         let isRight = true;
         let currentScore = this.state.currentScore;
         if (this.state.isChecked) isRight = this.state.isRight;
@@ -53,10 +67,9 @@ export default class PanelContent extends React.Component {
                     isRight = isRight && (this.state.checked[i] === this.state
                         .questions[this.state.currentIndex].answers[i].right)
                 }
-            }
-            else {
-                const userAnswer = this.state.currentInputAnswer.trim();
-                const correctAnswer = this.state.questions[this.state.currentIndex].answers[0].text.trim()
+            } else {
+                const userAnswer = this.state.currentInputAnswer.toLowerCase().trim();
+                const correctAnswer = this.state.questions[this.state.currentIndex].answers[0].text.toLowerCase().trim()
                 isRight = (userAnswer === correctAnswer)
             }
         }
@@ -78,6 +91,7 @@ export default class PanelContent extends React.Component {
 
     newClick = () => {
         const checked = []
+        cookies.remove(this.props.currentItem.id)
         this.state.questions[0].answers.forEach(() => checked.push(false))
         this.setState({
             currentIndex: 0,
@@ -93,14 +107,16 @@ export default class PanelContent extends React.Component {
     checkClick = () => {
         let isRight = true
         if (this.state.questions[this.state.currentIndex].type !== 'input') {
+            console.log(this.state.checked)
             for (let i = 0; i < this.state.checked.length; i++) {
+                console.log(this.state
+                    .questions[this.state.currentIndex].answers[i])
                 isRight = isRight && (this.state.checked[i] === this.state
                     .questions[this.state.currentIndex].answers[i].right)
             }
-        }
-        else {
-            const userAnswer = this.state.currentInputAnswer.trim();
-            const correctAnswer = this.state.questions[this.state.currentIndex].answers[0].text.trim()
+        } else {
+            const userAnswer = this.state.currentInputAnswer.toLowerCase().trim();
+            const correctAnswer = this.state.questions[this.state.currentIndex].answers[0].text.toLowerCase().trim()
             isRight = (userAnswer === correctAnswer)
         }
         const isFirstCheckRight = this.state.isChecked ? this.state.isRight : isRight;
@@ -119,20 +135,42 @@ export default class PanelContent extends React.Component {
         })
             .then(data => {
                 const questions = data.data;
-                console.log(questions.length)
+                let savedState = cookies.get(this.props.currentItem.id, {doNotParse: true});
                 const checked = [];
-                if (questions.length > 0)
-                    questions[0].answers.forEach(() => checked.push(false))
-                this.setState({
-                    questions: data.data,
-                    checked: checked,
-                    loading: false
-                })
+
+                if (savedState) {
+                    savedState = JSON.parse(savedState)
+                    const sortedQuestions = []
+                    savedState.questions.forEach(x => {
+                        try {
+                            sortedQuestions.push(questions.filter(elem => elem.id === x)[0])
+                        } catch (e) {
+                            console.log(e)
+                        }
+                    })
+                    if (sortedQuestions.length > 0)
+                        sortedQuestions[0].answers.forEach(() => checked.push(false))
+                    this.setState({
+                        questions: sortedQuestions,
+                        currentIndex: savedState.currentIndex,
+                        currentScore: savedState.currentScore,
+                        checked: checked,
+                        loading: false
+                    })
+                } else {
+                    if (questions.length > 0)
+                        questions[0].answers.forEach(() => checked.push(false))
+                    this.setState({
+                        questions: data.data,
+                        checked: checked,
+                        loading: false
+                    })
+                }
             })
     }
     shuffle = (a) => {
         let temp, j;
-        for (let i = a.length - 1; i > 0; i--){
+        for (let i = a.length - 1; i > 0; i--) {
             j = Math.floor(Math.random() * (i + 1));
             temp = a[i];
             a[i] = a[j];
@@ -141,14 +179,15 @@ export default class PanelContent extends React.Component {
         return a;
     }
     shuffleClick = () => {
-        const {questions} = this.state
+        let {questions} = this.state
         for (let i = 0; i < questions.length; i++) {
             questions[i].answers = this.shuffle(questions[i].answers)
         }
+        questions = this.shuffle(questions)
         const checked = []
-        this.state.questions[0].answers.forEach(() => checked.push(false))
+        questions[0].answers.forEach(() => checked.push(false))
         this.setState({
-            questions: this.shuffle(questions),
+            questions: questions,
             currentIndex: 0,
             checked: checked,
             isChecked: false,
@@ -157,6 +196,7 @@ export default class PanelContent extends React.Component {
             currentScore: 0
         })
     }
+
     componentDidMount() {
         this.loadQuestions();
     }
@@ -176,43 +216,48 @@ export default class PanelContent extends React.Component {
                     {this.state.currentIndex < this.state.questions.length ?
                         <div className={'question-content'}>
                             {this.state.currentIndex === 0 && <span style={{
-                                padding: '10px',
-                                paddingBottom: '1px',
                                 borderBottom: '1px solid green',
+                                marginBottom: '10px',
                                 color: 'green',
                                 cursor: 'pointer',
-                                marginBottom: '10px',
                             }} onClick={this.shuffleClick}>Перемешать всё</span>}
+                            {this.state.currentIndex !== 0 ?
+                                <span style={{
+                                    borderBottom: '1px solid green',
+                                    color: 'green',
+                                    cursor: 'pointer',
+                                    marginBottom: '10px',
+                                }} onClick={this.newClick}>Обнулить всё</span> : null}
                             <div>{this.state.currentIndex + 1}/{this.state.questions.length}</div>
                             <div className={'question-text'} style={{textAlign: 'center'}}
                                  dangerouslySetInnerHTML={{__html: question.text}}>
                             </div>
                             <div className={'answers'}>
                                 {question.answers.map((elem, index) => {
-                                    console.log(elem)
                                     if (question.type === 'radio') {
                                         return <label className={'answer'}
-                                                    style={{display: 'flex'}}><input
+                                                      style={{display: 'flex'}}><input
                                             type={'radio'}
                                             checked={this.state.checked[index]}
                                             name={index}
                                             onChange={this.handleChange}/>
                                             <div style={{maxWidth: '90%', wordBreak: 'break-word'}}
-    dangerouslySetInnerHTML={{__html: elem.text}}/>
+                                                 dangerouslySetInnerHTML={{__html: elem.text}}/>
                                         </label>
                                     } else if (question.type === 'checkbox') {
                                         return <label
-                                                    className={'answer'} style={{display: 'flex'}}><input
+                                            className={'answer'} style={{display: 'flex'}}><input
                                             type={'checkbox'}
                                             name={index}
                                             checked={this.state.checked[index]}
                                             onChange={this.handleChange}/>
                                             <div style={{maxWidth: '90%', wordBreak: 'break-word'}}
-    dangerouslySetInnerHTML={{__html: elem.text}}/>
+                                                 dangerouslySetInnerHTML={{__html: elem.text}}/>
                                         </label>
                                     } else if (question.type === 'text') {
-                                        return <div className={'answer'} style={{wordBreak: 'break-word'}}
-    dangerouslySetInnerHTML={{__html: elem.text}}/>
+                                        return <div className={'answer'}
+                                                    style={{wordBreak: 'break-word'}}
+                                                    dangerouslySetInnerHTML={{__html: elem.text}}/>
                                     } else if (question.type === 'input') {
                                         return <div className={'input'}>
                                             <input type={'text'} name={index}
@@ -221,8 +266,7 @@ export default class PanelContent extends React.Component {
                                                    value={this.state.currentInputAnswer}
                                                    onChange={this.handleChange}/>
                                         </div>
-                                    }
-                                    else return '';
+                                    } else return '';
                                 })}
                             </div>
                             {this.state.isChecked ?
@@ -231,10 +275,11 @@ export default class PanelContent extends React.Component {
                                     color: this.state.isCurrentRight ? 'green' : 'red'
                                 }}>
                                     <div>{this.state.isCurrentRight ? "Верно" : "Неверно"}</div>
-                                    {!this.state.isCurrentRight ? ( question.type !== 'input' ?
+                                    {!this.state.isCurrentRight ? (question.type !== 'input' ?
                                         <div>Верные варианты: {question.answers.map((x, index) => {
                                             return (x.right ? index + 1 : '') + " "
-                                        })}</div> : <div>Верный ответ: {question.answers[0].text}</div>) : null}
+                                        })}</div> :
+                                        <div>Верный ответ: {question.answers[0].text}</div>) : null}
                                 </div>
                                 : null}
                             <div className={'button-bar'}>
